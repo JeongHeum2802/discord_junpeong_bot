@@ -164,6 +164,15 @@ async def on_message(message: discord.Message):
     user_prompt = message.content.replace(f"<@{client.user.id}>", "").strip()
     user_prompt = user_prompt.replace(f"<@!{client.user.id}>", "").strip()
     
+    if user_prompt.lower() in ["도움말", "help", "명령어", "사용법"]:
+        await message.reply(
+            "--사용 가능한 명령어--\n"
+            "`@준평냥 질문내용` - AI에게 질문하기\n"
+            "`@준평냥 초기화` - AI 채널별 문맥 초기화\n"
+            "`@준평냥 도움말` - 명령어 목록 보기"
+        )
+        return
+    
     if user_prompt == "초기화":
         channel_reset_times[message.channel.id] = message.created_at
         await message.reply("이 채널의 대화 문맥이 초기화됐어. 이제 이전 채팅은 참고하지 않을게.")
