@@ -16,3 +16,10 @@ discord 봇 생성
 - 터미널에 python bot.py  (봇이 온라인으로 바뀜)
 
 ![alt text](./README/소개화면.png)
+
+---
+
+### 대기열 업데이트
+
+여러 요청이 동시에 들어올 경우 비동기 큐를 이용해 FIFO 방식으로 스케줄링하게 처리하였다.
+![alt text](./README/대기열.png)
