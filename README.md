@@ -12,7 +12,7 @@ discord 봇 생성
 
 환경에서 실행
 - Ollama를 공식 사이트를 통해 설치
-- Ollama 모델을 로드, CSV창에 : ollama pull qwen2.5:7b  (모델 이름은 본인 모델에 맞게) (컴퓨터 킬 때마다 로드)
+- Ollama 모델을 로드, CSV창에 : ollama pull qwen2.5:7b  (모델 이름은 본인 모델에 맞게) (한번만 다운로드)
 - 터미널에 python bot.py  (봇이 온라인으로 바뀜)
 
 ![alt text](./README/소개화면.png)

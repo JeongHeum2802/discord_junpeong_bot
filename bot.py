@@ -1,6 +1,7 @@
 import os
 import aiohttp
 import discord
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,6 +13,10 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
+
+request_queue = asyncio.Queue(maxsize=10)
+worker_task = None
+is_processing = False
 
 # ollama에 요청 후 content return
 async def ask_ollama(messages: list[dict]) -> str:
@@ -61,10 +66,80 @@ async def get_recent_channel_messages(message: discord.Message, limit: int = 10)
     
     return recent_messages
 
+# 대화 청크로 자르는 함수
+def split_message(text: str, max_length: int = 1900) -> list[str]:
+    chunks = []
+
+    while len(text) > max_length:
+        split_index = text.rfind("\n", 0, max_length)
+
+        if split_index == -1:
+            split_index = max_length
+
+        chunks.append(text[:split_index])
+        text = text[split_index:].lstrip()
+
+    if text:
+        chunks.append(text)
+
+    return chunks
+
+# 요청 큐 스케줄링 worker 함수
+async def request_worker():
+    global is_processing
+    while True:
+        message, user_prompt = await request_queue.get()
+        
+        is_processing = True
+
+        try:
+            async with message.channel.typing():
+                try:
+                    recent_messages = await get_recent_channel_messages(message, limit=10)
+                    
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "너는 한국어 전용 Discord AI 봇이다. "
+                                "모든 답변은 반드시 한국어로만 작성한다. "
+                                "중국어, 일본어, 영어 문장을 절대 섞지 않는다. "
+                                "아래에는 현재 채널의 최근 대화가 포함되어 있다. "
+                                "최근 대화는 참고용이며, 반드시 마지막 사용자 요청에 답변하라."
+                            )
+                        },
+                        *recent_messages,
+                        {
+                            "role": "user",
+                            "content": f"{message.author.display_name}: {user_prompt}"
+                        }
+                    ]
+                    
+                    answer = await ask_ollama(messages)
+                    
+                except Exception as e:
+                    answer = f"오류가 발생했어: `{e}`"
+                    
+            for chunk in split_message(answer):
+                await message.reply(chunk)
+                
+        finally:
+            request_queue.task_done()
+            
+            if request_queue.empty():
+                is_processing = False
+
 
 @client.event
 async def on_ready():
+    global worker_task
+    
     print(f"봇 로그인 완료: {client.user}")
+    
+    # 중복 worker 생성 방지
+    if worker_task is None or worker_task.done():
+        worker_task = asyncio.create_task(request_worker())
+        print("요청 큐 worker 시작")
 
 
 @client.event
@@ -85,38 +160,15 @@ async def on_message(message: discord.Message):
         await message.reply("질문을 같이 입력해줘.")
         return
 
-    async with message.channel.typing():
-        try:
-            # 현재 메세지 + 이전 기록 10개 합쳐서 제출
-            recent_messages = await get_recent_channel_messages(message, limit=10)
-            
-            messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "너는 한국어 전용 Discord AI 봇이다. "
-                        "모든 답변은 반드시 한국어로만 작성한다. "
-                        "중국어, 일본어, 영어 문장을 절대 섞지 않는다. "
-                        "아래에는 현재 채널의 최근 대화가 포함되어 있다. "
-                        "최근 대화를 참고해서 문맥에 맞게 답변하되, 마지막 사용자 요청에 답변하라."
-                    )
-                },
-                *recent_messages,
-                {
-                    "role": "user",
-                    "content": f"{message.author.display_name}: {user_prompt}"
-                }
-            ]
-            
-            answer = await ask_ollama(messages)
-        except Exception as e:
-            answer = f"오류가 발생했어: `{e}`"
-
-    # 디스코드 메시지 길이 제한 대응
-    if len(answer) > 1900:
-        answer = answer[:1900] + "\n\n...답변이 너무 길어서 잘랐어."
-
-    await message.reply(answer)
-
+    if request_queue.full():
+        await message.reply("현재 요청이 너무 많이 밀려 있어. 잠시 후 다시 요청해줘.")
+        return
+    
+    # 대기열 등록
+    if is_processing:
+        await request_queue.put((message,user_prompt))
+        await message.reply(f"요청을 대기열에 추가했어. 현재 대기 순번: {request_queue.qsize()}번")
+    else:
+        await request_queue.put((message,user_prompt))
 
 client.run(DISCORD_TOKEN)
