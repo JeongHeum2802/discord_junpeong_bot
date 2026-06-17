@@ -4,6 +4,13 @@
 
 ### 실행 방법
 
+.env
+```
+DISCORD_TOKEN=YOUR_TOKEN
+OLLAMA_MODEL=qwen2.5:14b
+OLLAMA_URL=http://localhost:11434/api/chat
+```
+
 discord 봇 생성
 - Discord 개발자 포털에 접속
 - 봇 생성 후 .env 파일에 본인 봇의 token을 기입
