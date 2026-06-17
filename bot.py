@@ -15,8 +15,10 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 request_queue = asyncio.Queue(maxsize=10)
-worker_task = None
-is_processing = False
+worker_task = None # 대기열 스케줄링 worker
+is_processing = False # 작업 처리중인지 확인하는 변수
+
+channel_reset_times = {} # 채널별 reset time
 
 # ollama에 요청 후 content return
 async def ask_ollama(messages: list[dict]) -> str:
@@ -39,9 +41,15 @@ async def ask_ollama(messages: list[dict]) -> str:
 async def get_recent_channel_messages(message: discord.Message, limit: int = 10) -> list[dict]:
     recent_messages = []
     
-    async for msg in message.channel.history(limit=limit + 1):
+    reset_time = channel_reset_times.get(message.channel.id)
+    
+    async for msg in message.channel.history(limit=50):
         # 현재 봇을 호출한 메세지는 마지막아 따로 추가할거라 제외
         if msg.id == message.id:
+            continue
+        
+        # reset 이전 메세지 패스
+        if reset_time is not None and msg.created_at <= reset_time:
             continue
         
         # 내용 없는 메세지 패스
@@ -155,6 +163,11 @@ async def on_message(message: discord.Message):
     # 메시지에서 봇 멘션 부분 제거
     user_prompt = message.content.replace(f"<@{client.user.id}>", "").strip()
     user_prompt = user_prompt.replace(f"<@!{client.user.id}>", "").strip()
+    
+    if user_prompt == "초기화":
+        channel_reset_times[message.channel.id] = message.created_at
+        await message.reply("이 채널의 대화 문맥이 초기화됐어. 이제 이전 채팅은 참고하지 않을게.")
+        return
     
     if not user_prompt:
         await message.reply("질문을 같이 입력해줘.")
